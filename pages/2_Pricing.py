@@ -473,11 +473,17 @@ with tabs[4]:
                                     key=f"ac_obs_{rk}")
 
     def _price_ac(spot=100, vol=None, barrier=None):
+        # spot is % of initial (100 = at initial level).
+        # price_autocall works in normalised space (S0=1) so we must rescale
+        # the absolute barriers to be relative to current spot.
+        b = barrier if barrier is not None else ac_barrier
+        barrier_rel = b * 100.0 / spot
+        ki_rel      = ac_ki * 100.0 / spot
         return price_autocall(
             spot=spot,
-            barrier_pct=barrier if barrier is not None else ac_barrier,
-            coupon_barrier_pct=barrier if barrier is not None else ac_barrier,
-            ki_barrier_pct=ac_ki,
+            barrier_pct=barrier_rel,
+            coupon_barrier_pct=barrier_rel,
+            ki_barrier_pct=ki_rel,
             coupon_pa=ac_coupon,
             maturity_years=ac_maturity,
             obs_per_year=ac_obs,
@@ -534,11 +540,14 @@ with tabs[4]:
         ac2.plotly_chart(_sens_chart(vols_ac*100, prices_vs_vol, "Vol (%)", "Price (% par)",
                                       "Price vs Vol", ac_sigma*100), use_container_width=True)
 
-        ac3, ac4 = st.columns(2)
+        ac3, ac4, ac5 = st.columns(3)
         ac3.plotly_chart(_sens_chart(spots_ac, deltas_vs_spot, "Spot (% initial)",
                                       "Δ Price / Δ Spot", "Delta vs Spot", 100, "#a78bfa"),
                           use_container_width=True)
-        ac4.plotly_chart(_sens_chart(spots_ac, vegas_vs_spot, "Spot (% initial)",
+        ac4.plotly_chart(_sens_chart(spots_ac, gammas_vs_spot, "Spot (% initial)",
+                                      "Δ² Price / Δ Spot²", "Gamma vs Spot", 100, "#fb923c"),
+                          use_container_width=True)
+        ac5.plotly_chart(_sens_chart(spots_ac, vegas_vs_spot, "Spot (% initial)",
                                       "Δ Price / Δ1%vol", "Vega vs Spot", 100, "#34d399"),
                           use_container_width=True)
 
