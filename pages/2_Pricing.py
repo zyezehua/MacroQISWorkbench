@@ -92,6 +92,25 @@ def _sens_chart(x, y, xlabel, ylabel, title, vline=None, color="#4FC3F7"):
     return fig
 
 
+_TENOR_UNITS  = ["Days", "Weeks", "Months", "Years"]
+_TENOR_TO_YR  = {"Days": 1/365, "Weeks": 7/365, "Months": 1/12, "Years": 1.0}
+
+
+def _tenor_input(label, default_years, key, min_years=0.1):
+    """Render a (value, unit) pair and return duration in years."""
+    def_unit = "Months" if default_years < 1.0 else "Years"
+    def_val  = float(round(default_years * 12)) if default_years < 1.0 else float(default_years)
+    vc, uc = st.columns([2, 1])
+    unit = uc.selectbox("", _TENOR_UNITS, index=_TENOR_UNITS.index(def_unit),
+                         key=f"{key}_unit", label_visibility="collapsed")
+    fmt  = "%.0f" if unit in ("Days", "Weeks", "Months") else "%.2f"
+    step = 1.0    if unit in ("Days", "Weeks", "Months") else 0.5
+    minv = 1.0    if unit in ("Days", "Weeks", "Months") else min_years
+    val  = vc.number_input(label, value=def_val, step=step, min_value=minv,
+                            key=f"{key}_val", format=fmt)
+    return float(val) * _TENOR_TO_YR[unit]
+
+
 # ── Product tabs ───────────────────────────────────────────────────────────────
 tabs = st.tabs([
     "📐 Rate Swaption",
@@ -110,8 +129,8 @@ with tabs[0]:
     c1, c2, c3 = st.columns(3)
     with c1:
         opt_type   = st.radio("Type", ["payer", "receiver"], horizontal=True, key=f"swpn_type_{rk}")
-        T_exp      = st.number_input("Option Expiry (Y)", value=1.0, step=0.5, min_value=0.1, key=f"swpn_T_{rk}")
-        tenor      = st.number_input("Swap Tenor (Y)", value=10.0, step=1.0, min_value=0.5, key=f"swpn_ten_{rk}")
+        T_exp      = _tenor_input("Option Expiry", 1.0, f"swpn_T_{rk}")
+        tenor      = _tenor_input("Swap Tenor", 10.0, f"swpn_ten_{rk}", min_years=0.5)
     with c2:
         fwd_rate_pct = st.number_input("Forward Swap Rate (%)", value=4.30, step=0.05, key=f"swpn_fwd_{rk}")
         fwd_rate   = fwd_rate_pct / 100
@@ -194,7 +213,7 @@ with tabs[1]:
         bfo_type   = st.radio("Option Type", ["call", "put"], horizontal=True, key=f"bfo_type_{rk}")
         futures_px = st.number_input("Futures Price (% par)", value=110.50, step=0.25, key=f"bfo_F_{rk}")
         strike_bfo = st.number_input("Strike (% par)", value=110.50, step=0.25, key=f"bfo_K_{rk}")
-        T_bfo      = st.number_input("Expiry (Y)", value=0.25, step=0.083, min_value=0.02, key=f"bfo_T_{rk}")
+        T_bfo      = _tenor_input("Expiry", 0.25, f"bfo_T_{rk}")
     with c2:
         sigma_bfo        = st.number_input("Vol (%)", value=8.0, step=0.5, min_value=0.1,
                                             key=f"bfo_vol_{rk}") / 100
@@ -251,7 +270,7 @@ with tabs[2]:
                     spot_default = fetched
 
         S             = st.number_input("Spot", value=float(round(spot_default)), step=10.0, key=f"eq_S_{rk}")
-        T_eq          = st.number_input("Expiry (Y)", value=0.25, step=0.083, min_value=0.01, key=f"eq_T_{rk}")
+        T_eq          = _tenor_input("Expiry", 0.25, f"eq_T_{rk}")
         sigma_eq      = st.number_input("ATM Vol (%)", value=18.0, step=1.0,
                                          min_value=0.1, key=f"eq_vol_{rk}") / 100
         eq_contracts  = st.number_input("# Contracts", value=1, step=1, min_value=1, key=f"eq_cnt_{rk}")
@@ -415,8 +434,7 @@ with tabs[3]:
             atm_vol_vs   = st.number_input("ATM Implied Vol (%)", value=18.0, step=0.5, key=f"vs_atm_{rk}") / 100
             rv_input     = st.number_input("Realized Vol to Date (%, 0=forward start)",
                                             value=0.0, step=0.5, key=f"vs_rv_{rk}") / 100
-            mat_vs       = st.number_input("Maturity (Y)", value=0.5, step=0.083,
-                                            min_value=0.01, key=f"vs_mat_{rk}")
+            mat_vs       = _tenor_input("Maturity", 0.5, f"vs_mat_{rk}")
             pos_vs       = st.radio("Position", ["short", "long"], horizontal=True, key=f"vs_pos_{rk}")
         with c2:
             skew_vs      = st.number_input("Skew Slope", value=-0.10, step=0.01, key=f"vs_skew_{rk}")
@@ -440,7 +458,7 @@ with tabs[3]:
 
     elif prod_choice == "Vol Swap":
         atm_vol_vlsw = st.number_input("ATM Vol (%)", value=18.0, step=0.5, key=f"vlsw_atm_{rk}") / 100
-        mat_vlsw     = st.number_input("Maturity (Y)", value=0.5, step=0.083, key=f"vlsw_mat_{rk}")
+        mat_vlsw     = _tenor_input("Maturity", 0.5, f"vlsw_mat_{rk}")
         pos_vlsw     = st.radio("Position", ["short", "long"], horizontal=True, key=f"vlsw_pos_{rk}")
 
         if st.button("Price Vol Swap", type="primary"):
@@ -491,7 +509,7 @@ with tabs[4]:
         ac_coupon  = st.number_input("Annual Coupon (%)", value=8.0, step=0.5,
                                       min_value=0.0, key=f"ac_cpn_{rk}") / 100
     with c3:
-        ac_maturity = st.selectbox("Maturity", [1, 2, 3, 5], index=2, key=f"ac_mat_{rk}")
+        ac_maturity = _tenor_input("Maturity", 3.0, f"ac_mat_{rk}", min_years=0.5)
         ac_obs      = st.selectbox("Observation", [4, 12, 1], index=0,
                                     format_func=lambda x: {4: "Quarterly", 12: "Monthly", 1: "Annual"}[x],
                                     key=f"ac_obs_{rk}")
@@ -599,7 +617,7 @@ with tabs[5]:
     c1, c2 = st.columns(2)
     with c1:
         sn_spot     = st.number_input("Spot / Reference Level", value=100.0, step=1.0, key=f"sn_spot_{rk}")
-        sn_mat      = st.number_input("Maturity (Y)", value=3.0, step=0.5, min_value=0.5, key=f"sn_mat_{rk}")
+        sn_mat      = _tenor_input("Maturity", 3.0, f"sn_mat_{rk}", min_years=0.5)
         sn_sigma    = st.number_input("Vol (%)", value=18.0, step=1.0, key=f"sn_sig_{rk}") / 100
         sn_r        = st.number_input("Risk-Free Rate (%)", value=round(r * 100, 2),
                                        step=0.05, key=f"sn_r_{rk}") / 100
