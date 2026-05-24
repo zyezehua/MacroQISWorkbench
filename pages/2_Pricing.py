@@ -131,7 +131,8 @@ with tabs[0]:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Price", f"{result['price_bps']:.1f} bps",
                     f"${result['price_amount']:,.0f}", delta_color="off")
-        col2.metric("Delta (DV01)", f"{result['delta_dv01_bps']:.1f} bps/100%")
+        col2.metric("DV01 (swap conv.)", f"{result['dv01_bps']:.4f} bps/bp",
+                    f"${result['dv01_amount']:,.0f}/bp", delta_color="off")
         col3.metric("Vega", f"{result['vega_bps']:.2f} bps/vol pt")
         col4.metric("Break-Even", f"{result['break_even_bps']:.1f} bps")
 
@@ -153,11 +154,11 @@ with tabs[0]:
             return price_swaption(F, K, T, ten, s, notional=notional, option_type=ot)
 
         price_vs_rate  = [_sw(F=f)["price_bps"] for f in rates]
-        delta_vs_rate  = [_sw(F=f)["delta_dv01_bps"] for f in rates]
+        delta_vs_rate  = [_sw(F=f)["dv01_bps"] for f in rates]
         vega_vs_rate   = [_sw(F=f)["vega_bps"] for f in rates]
         gamma_vs_rate  = [_sw(F=f)["gamma"] for f in rates]
         price_vs_vol   = [_sw(s=v)["price_bps"] for v in vols]
-        delta_vs_vol   = [_sw(s=v)["delta_dv01_bps"] for v in vols]
+        delta_vs_vol   = [_sw(s=v)["dv01_bps"] for v in vols]
         vega_vs_vol    = [_sw(s=v)["vega_bps"] for v in vols]
 
         ra = rates * 100  # percent
@@ -166,16 +167,16 @@ with tabs[0]:
         r1c1, r1c2, r1c3 = st.columns(3)
         r1c1.plotly_chart(_sens_chart(ra, price_vs_rate, "Rate (%)", "Price (bps)",
                                        "Price vs Rate", fwd_rate*100), use_container_width=True)
-        r1c2.plotly_chart(_sens_chart(ra, delta_vs_rate, "Rate (%)", "DV01 (bps/100%)",
-                                       "Delta vs Rate", fwd_rate*100, "#a78bfa"), use_container_width=True)
+        r1c2.plotly_chart(_sens_chart(ra, delta_vs_rate, "Rate (%)", "DV01 (bps/bp)",
+                                       "DV01 vs Rate", fwd_rate*100, "#a78bfa"), use_container_width=True)
         r1c3.plotly_chart(_sens_chart(ra, gamma_vs_rate, "Rate (%)", "Gamma",
                                        "Gamma vs Rate", fwd_rate*100, "#fb923c"), use_container_width=True)
 
         r2c1, r2c2, r2c3 = st.columns(3)
         r2c1.plotly_chart(_sens_chart(ra, vega_vs_rate, "Rate (%)", "Vega (bps/vol pt)",
                                        "Vega vs Rate", fwd_rate*100, "#34d399"), use_container_width=True)
-        r2c2.plotly_chart(_sens_chart(va, delta_vs_vol, "Vol (%)", "DV01 (bps/100%)",
-                                       "Delta vs Vol", sigma_sw*100, "#a78bfa"), use_container_width=True)
+        r2c2.plotly_chart(_sens_chart(va, delta_vs_vol, "Vol (%)", "DV01 (bps/bp)",
+                                       "DV01 vs Vol", sigma_sw*100, "#a78bfa"), use_container_width=True)
         r2c3.plotly_chart(_sens_chart(va, vega_vs_vol, "Vol (%)", "Vega (bps/vol pt)",
                                        "Vega vs Vol", sigma_sw*100, "#34d399"), use_container_width=True)
 
