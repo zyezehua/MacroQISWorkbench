@@ -119,13 +119,15 @@ with tabs[0]:
         strike     = fwd_rate + otm_bps / 10_000
         st.metric("Strike", f"{strike*100:.3f}%")
     with c3:
-        sigma_sw = st.number_input("Swaption Vol (%)", value=22.0, step=1.0,
-                                    min_value=0.1, key=f"swpn_vol_{rk}") / 100
+        sigma_sw      = st.number_input("Swaption Vol (%)", value=22.0, step=1.0,
+                                         min_value=0.1, key=f"swpn_vol_{rk}") / 100
+        swpn_notional = st.number_input("Notional ($)", value=notional,
+                                         step=1_000_000, format="%d", key=f"swpn_N_{rk}")
 
     if st.button("Price Swaption", type="primary"):
         result = price_swaption(fwd_rate, strike, T_exp, tenor, sigma_sw,
-                                notional=notional, option_type=opt_type)
-        xva = total_xva("RATE_SWPN", T_exp + tenor, notional, client_type,
+                                notional=swpn_notional, option_type=opt_type)
+        xva = total_xva("RATE_SWPN", T_exp + tenor, swpn_notional, client_type,
                         cds_override or None, funding_spread)
 
         col1, col2, col3, col4 = st.columns(4)
@@ -133,11 +135,13 @@ with tabs[0]:
                     f"${result['price_amount']:,.0f}", delta_color="off")
         col2.metric("DV01 (swap conv.)", f"{result['dv01_bps']:.4f} bps/bp",
                     f"${result['dv01_amount']:,.0f}/bp", delta_color="off")
-        col3.metric("Vega", f"{result['vega_bps']:.2f} bps/vol pt")
+        col3.metric("Vega", f"{result['vega_bps']:.2f} bps/vol pt",
+                    f"${result['vega_amount']:,.0f}/vol pt", delta_color="off")
         col4.metric("Break-Even", f"{result['break_even_bps']:.1f} bps")
 
         col5, col6, col7 = st.columns(3)
-        col5.metric("Theta", f"{result['theta_bps_day']:.3f} bps/day")
+        col5.metric("Theta", f"{result['theta_bps_day']:.3f} bps/day",
+                    f"${result['theta_amount_day']:,.0f}/day", delta_color="off")
         col6.metric("xVA (CVA+FVA)", f"{xva['total_xva_bps']:.1f} bps",
                     f"${xva['total_xva_amount']:,.0f}", delta_color="off")
         col7.metric("Net After xVA", f"{result['price_bps'] - xva['total_xva_bps']:.1f} bps")
@@ -192,25 +196,33 @@ with tabs[1]:
         strike_bfo = st.number_input("Strike (% par)", value=110.50, step=0.25, key=f"bfo_K_{rk}")
         T_bfo      = st.number_input("Expiry (Y)", value=0.25, step=0.083, min_value=0.02, key=f"bfo_T_{rk}")
     with c2:
-        sigma_bfo  = st.number_input("Vol (%)", value=8.0, step=0.5, min_value=0.1,
-                                      key=f"bfo_vol_{rk}") / 100
+        sigma_bfo        = st.number_input("Vol (%)", value=8.0, step=0.5, min_value=0.1,
+                                            key=f"bfo_vol_{rk}") / 100
+        bfo_contracts    = st.number_input("# Contracts", value=1, step=1, min_value=1,
+                                            key=f"bfo_cnt_{rk}")
+        bfo_par_notional = st.number_input("Notional per Contract ($)", value=100_000,
+                                            step=100_000, format="%d", key=f"bfo_N_{rk}")
+
+    bfo_notional = bfo_contracts * bfo_par_notional
 
     if st.button("Price Bond Futures Option", type="primary"):
         result = price_bond_futures_option(futures_px, strike_bfo, T_bfo, sigma_bfo,
-                                            r=r, notional=notional, option_type=bfo_type)
-        xva = total_xva("RATE_BFO", T_bfo, notional, client_type,
+                                            r=r, notional=bfo_notional, option_type=bfo_type)
+        xva = total_xva("RATE_BFO", T_bfo, bfo_notional, client_type,
                         cds_override or None, funding_spread)
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Price", f"{result['price_pct']:.4f}% par",
                     f"${result['price_amount']:,.0f}", delta_color="off")
-        col2.metric("Delta", f"{result['delta']:.4f}")
+        col2.metric("Delta", f"{result['delta']:.4f}",
+                    f"${result['delta'] * bfo_notional / 100:,.0f} equiv.", delta_color="off")
         col3.metric("Vega", f"${result['vega_per_vol_pt']:,.0f}/vol pt")
-        col4.metric("Moneyness", f"{result['moneyness_pct']:+.2f}%")
+        col4.metric("DV01", f"${result['dv01_per_bp']:,.0f}/bp")
 
-        col5, col6 = st.columns(2)
+        col5, col6, col7 = st.columns(3)
         col5.metric("Theta", f"${result['theta_per_day']:,.0f}/day")
-        col6.metric("xVA", f"{xva['total_xva_bps']:.1f} bps")
+        col6.metric("Moneyness", f"{result['moneyness_pct']:+.2f}%")
+        col7.metric("xVA", f"{xva['total_xva_bps']:.1f} bps")
 
         with st.expander("Full Output"):
             st.json({**result, "xva": xva})
@@ -238,10 +250,12 @@ with tabs[2]:
                 if fetched:
                     spot_default = fetched
 
-        S      = st.number_input("Spot", value=float(round(spot_default)), step=10.0, key=f"eq_S_{rk}")
-        T_eq   = st.number_input("Expiry (Y)", value=0.25, step=0.083, min_value=0.01, key=f"eq_T_{rk}")
-        sigma_eq = st.number_input("ATM Vol (%)", value=18.0, step=1.0,
-                                    min_value=0.1, key=f"eq_vol_{rk}") / 100
+        S             = st.number_input("Spot", value=float(round(spot_default)), step=10.0, key=f"eq_S_{rk}")
+        T_eq          = st.number_input("Expiry (Y)", value=0.25, step=0.083, min_value=0.01, key=f"eq_T_{rk}")
+        sigma_eq      = st.number_input("ATM Vol (%)", value=18.0, step=1.0,
+                                         min_value=0.1, key=f"eq_vol_{rk}") / 100
+        eq_contracts  = st.number_input("# Contracts", value=1, step=1, min_value=1, key=f"eq_cnt_{rk}")
+        eq_multiplier = st.number_input("Contract Multiplier", value=100, step=1, min_value=1, key=f"eq_mult_{rk}")
 
     with c2:
         if strategy in ("Call", "Put", "Straddle"):
@@ -293,20 +307,27 @@ with tabs[2]:
         result = _price_eq(S, sigma_eq)
 
         if result:
-            xva = total_xva("EQ_VANILLA", T_eq, notional, client_type,
+            position_size = eq_contracts * eq_multiplier
+            pos_notional  = position_size * S
+            xva = total_xva("EQ_VANILLA", T_eq, pos_notional, client_type,
                             cds_override or None, funding_spread)
 
-            prem     = result.get("net_premium", result.get("net_cost",
-                       result.get("call_premium_collected", 0)))
-            prem_pct = result.get("net_premium_pct", result.get("net_cost_pct",
-                       result.get("premium_pct", 0)))
+            prem      = result.get("net_premium", result.get("net_cost",
+                        result.get("call_premium_collected", 0)))
+            prem_pct  = result.get("net_premium_pct", result.get("net_cost_pct",
+                        result.get("premium_pct", 0)))
+            net_delta = float(result.get("net_delta", result.get("put_delta", 0)) or 0)
+            net_vega  = float(result.get("net_vega", 0) or 0)
 
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Net Premium", f"{prem:.4f}", f"{prem_pct:.3f}% spot",
-                        delta_color="off")
-            col2.metric("Delta", f"{result.get('net_delta', result.get('put_delta', '—'))}")
-            col3.metric("Vega",  f"{result.get('net_vega', '—')}")
-            col4.metric("xVA",  f"{xva['total_xva_bps']:.1f} bps")
+            col1.metric("Net Premium", f"{prem:.4f}",
+                        f"${prem * position_size:,.0f} total", delta_color="off")
+            col2.metric("Delta", f"{net_delta:.4f}",
+                        f"{net_delta * position_size:.1f} shares equiv.", delta_color="off")
+            col3.metric("Vega", f"{net_vega:.4f}",
+                        f"${net_vega * position_size:,.0f}/1%vol", delta_color="off")
+            col4.metric("Size", f"{eq_contracts}c × {eq_multiplier}x",
+                        f"${pos_notional:,.0f} equiv.", delta_color="off")
 
             if "break_even_up" in result:
                 st.info(f"Break-evens: ↑ {result['break_even_up']:.1f}  |  ↓ {result['break_even_down']:.1f}")
@@ -329,15 +350,17 @@ with tabs[2]:
                 except Exception:
                     payoffs.append(0.0)
 
+            payoffs_pos = [y * position_size for y in payoffs]
             fig_payoff = go.Figure()
-            fig_payoff.add_trace(go.Scatter(x=list(spot_range), y=payoffs, mode="lines",
+            fig_payoff.add_trace(go.Scatter(x=list(spot_range), y=payoffs_pos, mode="lines",
                                              fill="tozeroy", line=dict(color="#4FC3F7", width=2),
                                              fillcolor="rgba(79,195,247,0.12)"))
             fig_payoff.add_hline(y=0, line_color="#9E9E9E", line_dash="dash")
             fig_payoff.add_vline(x=S, line_color="#FFD600", line_dash="dot",
                                   annotation_text="Current spot")
-            fig_payoff.update_layout(title="At-Expiry Payoff", xaxis_title="Spot at Expiry",
-                                      yaxis_title="P&L", **_DARK)
+            fig_payoff.update_layout(
+                title=f"At-Expiry P&L  ({eq_contracts}c × {eq_multiplier}x = {position_size:,} shares)",
+                xaxis_title="Spot at Expiry", yaxis_title="P&L ($)", **_DARK)
             st.plotly_chart(fig_payoff, use_container_width=True)
 
             # ── Sensitivity charts ─────────────────────────────────────────
@@ -350,32 +373,32 @@ with tabs[2]:
                 return float(res.get("net_premium", res.get("net_cost",
                              res.get("call_premium_collected", 0)))) if res else 0.0
 
-            prem_vs_spot = [_prem(_price_eq(s, sigma_eq)) for s in spots]
-            prem_vs_vol  = [_prem(_price_eq(S, v)) for v in vols_eq]
+            prem_vs_spot = [_prem(_price_eq(s, sigma_eq)) * position_size for s in spots]
+            prem_vs_vol  = [_prem(_price_eq(S, v))        * position_size for v in vols_eq]
 
-            # numerical delta and gamma vs spot
+            # numerical delta and gamma vs spot (position-scaled)
             delta_vs_spot, gamma_vs_spot, vega_vs_spot = [], [], []
             for s in spots:
                 p0  = _prem(_price_eq(s, sigma_eq))
                 pp  = _prem(_price_eq(s + eps, sigma_eq))
                 pm  = _prem(_price_eq(s - eps, sigma_eq))
                 pv  = _prem(_price_eq(s, min(sigma_eq + 0.01, 4.0)))
-                delta_vs_spot.append((pp - pm) / (2 * eps))
-                gamma_vs_spot.append((pp - 2*p0 + pm) / (eps**2))
-                vega_vs_spot.append((pv - p0) / 0.01)
+                delta_vs_spot.append((pp - pm) / (2 * eps)       * position_size)
+                gamma_vs_spot.append((pp - 2*p0 + pm) / eps**2   * position_size)
+                vega_vs_spot.append((pv - p0) / 0.01             * position_size)
 
             rc1, rc2, rc3 = st.columns(3)
-            rc1.plotly_chart(_sens_chart(spots, prem_vs_spot, "Spot", "Premium",
+            rc1.plotly_chart(_sens_chart(spots, prem_vs_spot, "Spot", "Premium ($)",
                                           "Premium vs Spot", S), use_container_width=True)
-            rc2.plotly_chart(_sens_chart(vols_eq*100, prem_vs_vol, "Vol (%)", "Premium",
+            rc2.plotly_chart(_sens_chart(vols_eq*100, prem_vs_vol, "Vol (%)", "Premium ($)",
                                           "Premium vs Vol", sigma_eq*100), use_container_width=True)
-            rc3.plotly_chart(_sens_chart(spots, delta_vs_spot, "Spot", "Delta",
+            rc3.plotly_chart(_sens_chart(spots, delta_vs_spot, "Spot", "Delta (shares)",
                                           "Delta vs Spot", S, "#a78bfa"), use_container_width=True)
 
             rc4, rc5, _ = st.columns(3)
-            rc4.plotly_chart(_sens_chart(spots, vega_vs_spot, "Spot", "Vega/1%vol",
+            rc4.plotly_chart(_sens_chart(spots, vega_vs_spot, "Spot", "Vega ($/1%vol)",
                                           "Vega vs Spot", S, "#34d399"), use_container_width=True)
-            rc5.plotly_chart(_sens_chart(spots, gamma_vs_spot, "Spot", "Gamma",
+            rc5.plotly_chart(_sens_chart(spots, gamma_vs_spot, "Spot", "Gamma ($/pt²)",
                                           "Gamma vs Spot", S, "#fb923c"), use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -472,6 +495,8 @@ with tabs[4]:
         ac_obs      = st.selectbox("Observation", [4, 12, 1], index=0,
                                     format_func=lambda x: {4: "Quarterly", 12: "Monthly", 1: "Annual"}[x],
                                     key=f"ac_obs_{rk}")
+        ac_notional = st.number_input("Notional ($)", value=notional,
+                                       step=1_000_000, format="%d", key=f"ac_N_{rk}")
 
     def _price_ac(spot=100, vol=None, barrier=None):
         # spot is % of initial (100 = at initial level).
@@ -489,12 +514,12 @@ with tabs[4]:
             maturity_years=ac_maturity,
             obs_per_year=ac_obs,
             sigma=vol if vol is not None else ac_sigma,
-            r=ac_r, q=ac_q, notional=notional,
+            r=ac_r, q=ac_q, notional=ac_notional,
         )
 
     if st.button("Price Autocall", type="primary"):
         result = _price_ac()
-        xva    = total_xva("STRUCT_AC", ac_maturity, notional, client_type,
+        xva    = total_xva("STRUCT_AC", ac_maturity, ac_notional, client_type,
                            cds_override or None, funding_spread)
 
         col1, col2, col3, col4 = st.columns(4)
@@ -573,13 +598,15 @@ with tabs[5]:
 
     c1, c2 = st.columns(2)
     with c1:
-        sn_spot  = st.number_input("Spot / Reference Level", value=100.0, step=1.0, key=f"sn_spot_{rk}")
-        sn_mat   = st.number_input("Maturity (Y)", value=3.0, step=0.5, min_value=0.5, key=f"sn_mat_{rk}")
-        sn_sigma = st.number_input("Vol (%)", value=18.0, step=1.0, key=f"sn_sig_{rk}") / 100
-        sn_r     = st.number_input("Risk-Free Rate (%)", value=round(r * 100, 2),
-                                    step=0.05, key=f"sn_r_{rk}") / 100
-        sn_q     = st.number_input("Div Yield (%)", value=round(q * 100, 2),
-                                    step=0.1, key=f"sn_q_{rk}") / 100
+        sn_spot     = st.number_input("Spot / Reference Level", value=100.0, step=1.0, key=f"sn_spot_{rk}")
+        sn_mat      = st.number_input("Maturity (Y)", value=3.0, step=0.5, min_value=0.5, key=f"sn_mat_{rk}")
+        sn_sigma    = st.number_input("Vol (%)", value=18.0, step=1.0, key=f"sn_sig_{rk}") / 100
+        sn_r        = st.number_input("Risk-Free Rate (%)", value=round(r * 100, 2),
+                                       step=0.05, key=f"sn_r_{rk}") / 100
+        sn_q        = st.number_input("Div Yield (%)", value=round(q * 100, 2),
+                                       step=0.1, key=f"sn_q_{rk}") / 100
+        sn_notional = st.number_input("Notional ($)", value=notional,
+                                       step=1_000_000, format="%d", key=f"sn_N_{rk}")
     with c2:
         if note_type == "Capital Protection Note":
             protection    = st.slider("Protection Level (%)", 80, 100, 100, key=f"sn_prot_{rk}") / 100
@@ -592,20 +619,24 @@ with tabs[5]:
         if note_type == "Capital Protection Note":
             result = price_capital_protection_note(
                 sn_spot, strike_ratio, participation, sn_mat,
-                sn_r, sn_q, sn_sigma, protection, notional,
+                sn_r, sn_q, sn_sigma, protection, sn_notional,
             )
-            xva = total_xva("STRUCT_AC", sn_mat, notional, client_type,
+            xva = total_xva("STRUCT_AC", sn_mat, sn_notional, client_type,
                             cds_override or None, funding_spread)
 
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Cost", f"{result['total_cost_pct']:.2f}%",
-                        "✅ Feasible" if result["feasible"] else "❌ Over par",
+                        f"${result['total_cost_pct'] / 100 * sn_notional:,.0f}  "
+                        + ("✅ Feasible" if result["feasible"] else "❌ Over par"),
                         delta_color="off")
-            col2.metric("ZC Bond Cost",    f"{result['zc_bond_cost_pct']:.2f}%")
-            col3.metric("Call Option Cost", f"{result['call_cost_pct']:.2f}%")
+            col2.metric("ZC Bond Cost",    f"{result['zc_bond_cost_pct']:.2f}%",
+                        f"${result['zc_bond_cost_pct'] / 100 * sn_notional:,.0f}", delta_color="off")
+            col3.metric("Call Option Cost", f"{result['call_cost_pct']:.2f}%",
+                        f"${result['call_cost_pct'] / 100 * sn_notional:,.0f}", delta_color="off")
 
             col4, col5, col6 = st.columns(3)
-            col4.metric("Issuer Margin",  f"{result['residual_margin_pct']:.2f}%")
+            col4.metric("Issuer Margin",  f"{result['residual_margin_pct']:.2f}%",
+                        f"${result['residual_margin_pct'] / 100 * sn_notional:,.0f}", delta_color="off")
             col5.metric("xVA",            f"{xva['total_xva_bps']:.1f} bps")
             col6.metric("Protection",     f"{result['protection_level_pct']:.0f}%",
                         f"Participation {result['participation_pct']:.0f}%",
@@ -613,17 +644,20 @@ with tabs[5]:
 
         else:
             result = price_yield_enhancement_note(
-                sn_spot, sn_strike_ratio, sn_mat, sn_r, sn_q, sn_sigma, notional,
+                sn_spot, sn_strike_ratio, sn_mat, sn_r, sn_q, sn_sigma, sn_notional,
             )
-            xva = total_xva("STRUCT_AC", sn_mat, notional, client_type,
+            xva = total_xva("STRUCT_AC", sn_mat, sn_notional, client_type,
                             cds_override or None, funding_spread)
 
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Total Yield",  f"{result['total_yield_pct']:.2f}%",
-                        f"{result['annualised_yield_pct']:.2f}% p.a.", delta_color="off")
-            col2.metric("Put Premium",  f"{result['premium_collected_pct']:.3f}%")
+                        f"${result['total_yield_pct'] / 100 * sn_notional:,.0f}  "
+                        f"({result['annualised_yield_pct']:.2f}% p.a.)", delta_color="off")
+            col2.metric("Put Premium",  f"{result['premium_collected_pct']:.3f}%",
+                        f"${result['premium_collected_pct'] / 100 * sn_notional:,.0f}", delta_color="off")
             col3.metric("Break-Even",   f"{result['break_even_pct_of_spot']:.2f}% of spot")
-            col4.metric("Max Loss",     f"{result['max_loss_pct']:.2f}%")
+            col4.metric("Max Loss",     f"{result['max_loss_pct']:.2f}%",
+                        f"${result['max_loss_pct'] / 100 * sn_notional:,.0f}", delta_color="off")
 
             col5, col6 = st.columns(2)
             col5.metric("xVA",      f"{xva['total_xva_bps']:.1f} bps")

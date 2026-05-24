@@ -44,6 +44,8 @@ def price_swaption(
     # Swap convention: DV01 = PV change per +1bp parallel rate shift
     dv01_bps     = g["delta"] * annuity                        # price change in bps per +1bp
     dv01_amount  = g["delta"] * annuity * notional * 0.0001    # dollar PV01 per +1bp
+    vega_amount  = g["vega"]  * annuity * notional             # dollar vega per 1 vol pt
+    theta_amount = g["theta"] * annuity * notional             # dollar theta per day
     break_even   = abs(price_bps / (dv01_bps + 1e-10))        # bps move to recover premium
 
     return {
@@ -52,6 +54,8 @@ def price_swaption(
         "price_amount": round(price_amount, 2),
         "dv01_bps": round(dv01_bps, 4),
         "dv01_amount": round(dv01_amount, 2),
+        "vega_amount": round(vega_amount, 2),
+        "theta_amount_day": round(theta_amount, 2),
         "gamma": round(g["gamma"], 6),
         "vega_bps": round(g["vega"] * annuity * 10_000, 2),
         "theta_bps_day": round(g["theta"] * annuity * 10_000, 4),

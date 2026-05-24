@@ -36,7 +36,8 @@ def price_bond_futures_option(
 
     price_pct    = raw           # in same units as futures_price (% of par)
     price_amount = raw / 100 * notional
-    dv01_per_bp  = g["delta"] * notional / 10_000 / 100  # $ per bp move in futures
+    # 1bp of futures price = ΔF=0.01 in %-par space; ∂price_amount/∂F = delta × N/100
+    dv01_per_bp  = g["delta"] * notional / 10_000       # $ per 1bp futures price move
 
     moneyness = (futures_price - strike) / strike
     break_even_pts = abs(price_pct / (g["delta"] + 1e-8))
@@ -46,6 +47,7 @@ def price_bond_futures_option(
         "price_pct": round(price_pct, 4),
         "price_amount": round(price_amount, 2),
         "delta": round(g["delta"], 4),
+        "dv01_per_bp": round(dv01_per_bp, 2),
         "gamma": round(g["gamma"], 6),
         "vega_per_vol_pt": round(g["vega"] * notional / 100, 2),
         "theta_per_day": round(g["theta"] * notional / 100, 2),
