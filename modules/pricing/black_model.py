@@ -42,7 +42,7 @@ def greeks(F, K, T, sigma, df, option_type="call"):
     return {
         "delta": round(delta, 6),
         "gamma": round(gamma, 8),
-        "vega": round(vega, 6),
+        "vega": vega,    # not rounded — callers multiply by annuity*10000 before display
         "theta": theta,  # not rounded — callers multiply by annuity*10000 before display
     }
 
