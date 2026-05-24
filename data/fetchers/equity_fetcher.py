@@ -22,11 +22,28 @@ def get_spot_prices(tickers=None, period="1y"):
 
 
 def get_current_spot(ticker_symbol):
+    """Return latest spot price. Falls back to last close from history on weekends/holidays."""
+    key = f"spot_{ticker_symbol}"
+    cached = get_cache(key)
+    if cached is not None:
+        return cached
     try:
         info = yf.Ticker(ticker_symbol).fast_info
-        return float(info.get("last_price") or info.get("regularMarketPrice", 0))
+        price = float(info.get("last_price") or info.get("regularMarketPrice") or 0)
+        if price > 0:
+            set_cache(key, price)
+            return price
     except Exception:
-        return None
+        pass
+    try:
+        hist = yf.download(ticker_symbol, period="5d", auto_adjust=True, progress=False)
+        if not hist.empty:
+            price = float(hist["Close"].squeeze().dropna().iloc[-1])
+            set_cache(key, price)
+            return price
+    except Exception:
+        pass
+    return None
 
 
 def get_vix_term_structure():

@@ -7,3 +7,4 @@ yfinance>=0.2.40
 fredapi>=0.5.1
 requests>=2.31.0
 python-dateutil>=2.9.0
+statsmodels>=0.14.0

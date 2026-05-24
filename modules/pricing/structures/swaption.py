@@ -41,8 +41,9 @@ def price_swaption(
 
     price_bps    = raw * annuity * 10_000
     price_amount = raw * annuity * notional
-    dv01_bps     = g["delta"] * annuity * 10_000       # rate delta in bps
-    break_even   = abs(price_bps / (dv01_bps + 1e-10)) # rate move to recover premium
+    dv01_bps     = g["delta"] * annuity * 10_000       # price sensitivity per 100% rate move
+    dv01_per_bp  = g["delta"] * annuity                # price_bps change per 1bp rate move
+    break_even   = abs(price_bps / (dv01_per_bp + 1e-10))  # bps move to recover premium
 
     return {
         "product": f"{option_type.capitalize()} Swaption {T_expiry:.0f}Y x {tenor_years:.0f}Y",

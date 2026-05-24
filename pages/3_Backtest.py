@@ -14,6 +14,13 @@ from modules.backtest.scenarios import SCENARIOS, slice_trades, describe_scenari
 from modules.backtest.attribution import payoff_attribution, attribution_summary
 
 st.set_page_config(page_title="Backtest · Macro QIS", page_icon="📈", layout="wide")
+
+st.markdown("""<style>
+[data-testid="stMetricValue"] { font-size: 1rem !important; }
+[data-testid="stMetricLabel"] { font-size: 0.72rem !important; }
+[data-testid="stMetricDelta"] { font-size: 0.72rem !important; }
+</style>""", unsafe_allow_html=True)
+
 st.title("📈 Backtest & Historical Analysis")
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -41,7 +48,14 @@ with st.sidebar:
     start_date = st.date_input("Start", value=pd.Timestamp("2010-01-01"))
     end_date   = st.date_input("End",   value=pd.Timestamp.today())
 
-    run_btn = st.button("Run Backtest", type="primary", use_container_width=True)
+    col_rb1, col_rb2 = st.columns(2)
+    with col_rb1:
+        run_btn = st.button("▶ Run", type="primary", use_container_width=True)
+    with col_rb2:
+        if st.button("↺ Reset", use_container_width=True):
+            st.session_state.bt_result = None
+            st.session_state.bt_params = {}
+            st.rerun()
 
 # ── Session state ──────────────────────────────────────────────────────────────
 if "bt_result" not in st.session_state:
@@ -209,15 +223,29 @@ with tab_dist:
 
     # P&L vs spot return scatter
     if "spot_ret_pct" in trade_df.columns:
-        fig_sc = px.scatter(
-            trade_df, x="spot_ret_pct", y=trade_df["pnl"] * 100,
-            color=trade_df["win"].map({True: "Win", False: "Loss"}),
-            color_discrete_map={"Win": "#22c55e", "Loss": "#ef4444"},
-            labels={"x": "Spot Return (%)", "y": "Trade P&L (%)", "color": ""},
-            title="P&L vs Spot Return",
-            trendline="ols",
-        )
+        x_vals = trade_df["spot_ret_pct"].values
+        y_vals = (trade_df["pnl"] * 100).values
+        colors = trade_df["win"].map({True: "#22c55e", False: "#ef4444"}).values
+
+        fig_sc = go.Figure()
+        fig_sc.add_trace(go.Scatter(
+            x=x_vals, y=y_vals, mode="markers",
+            marker=dict(color=list(colors), size=7, opacity=0.8),
+            name="Trades",
+        ))
+        # OLS trendline via numpy
+        mask = ~(np.isnan(x_vals) | np.isnan(y_vals))
+        if mask.sum() >= 2:
+            coef = np.polyfit(x_vals[mask], y_vals[mask], 1)
+            x_line = np.linspace(x_vals[mask].min(), x_vals[mask].max(), 100)
+            fig_sc.add_trace(go.Scatter(
+                x=x_line, y=np.polyval(coef, x_line),
+                mode="lines", line=dict(color="#facc15", width=1.5, dash="dot"),
+                name="OLS fit",
+            ))
         fig_sc.update_layout(
+            title="P&L vs Spot Return",
+            xaxis_title="Spot Return (%)", yaxis_title="Trade P&L (%)",
             plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
             font=dict(color="#fafafa"), height=320,
         )
