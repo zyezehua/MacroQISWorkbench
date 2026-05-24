@@ -53,8 +53,6 @@ with st.sidebar:
     rk = st.session_state.pricing_reset  # reset key
 
     client_type = st.selectbox("Client Type", CLIENT_TYPES, index=1, key=f"cl_{rk}")
-    notional = st.number_input("Notional", value=1_000_000, step=100_000,
-                                format="%d", key=f"notional_{rk}")
 
     st.markdown("---")
     st.markdown("**Market Rates (live or override)**")
@@ -140,7 +138,7 @@ with tabs[0]:
     with c3:
         sigma_sw      = st.number_input("Swaption Vol (%)", value=22.0, step=1.0,
                                          min_value=0.1, key=f"swpn_vol_{rk}") / 100
-        swpn_notional = st.number_input("Notional ($)", value=notional,
+        swpn_notional = st.number_input("Notional ($)", value=1_000_000,
                                          step=1_000_000, format="%d", key=f"swpn_N_{rk}")
 
     if st.button("Price Swaption", type="primary"):
@@ -174,7 +172,7 @@ with tabs[0]:
         vols   = np.linspace(sigma_sw * 0.4, sigma_sw * 2.0, 40)
 
         def _sw(F=fwd_rate, K=strike, T=T_exp, ten=tenor, s=sigma_sw, ot=opt_type):
-            return price_swaption(F, K, T, ten, s, notional=notional, option_type=ot)
+            return price_swaption(F, K, T, ten, s, notional=swpn_notional, option_type=ot)
 
         price_vs_rate  = [_sw(F=f)["price_bps"] for f in rates]
         delta_vs_rate  = [_sw(F=f)["dv01_bps"] for f in rates]
@@ -443,7 +441,7 @@ with tabs[3]:
         if st.button("Price Var Swap", type="primary"):
             rv = rv_input if rv_input > 0 else None
             result = price_var_swap(atm_vol_vs, rv, mat_vs, vega_notional, skew_vs, pos_vs)
-            xva    = total_xva("VOL_PROD", mat_vs, notional, client_type,
+            xva    = total_xva("VOL_PROD", mat_vs, vega_notional, client_type,
                                cds_override or None, funding_spread)
 
             c1, c2, c3 = st.columns(3)
@@ -457,12 +455,14 @@ with tabs[3]:
                 st.json({**result, "xva": xva})
 
     elif prod_choice == "Vol Swap":
-        atm_vol_vlsw = st.number_input("ATM Vol (%)", value=18.0, step=0.5, key=f"vlsw_atm_{rk}") / 100
-        mat_vlsw     = _tenor_input("Maturity", 0.5, f"vlsw_mat_{rk}")
-        pos_vlsw     = st.radio("Position", ["short", "long"], horizontal=True, key=f"vlsw_pos_{rk}")
+        atm_vol_vlsw  = st.number_input("ATM Vol (%)", value=18.0, step=0.5, key=f"vlsw_atm_{rk}") / 100
+        mat_vlsw      = _tenor_input("Maturity", 0.5, f"vlsw_mat_{rk}")
+        pos_vlsw      = st.radio("Position", ["short", "long"], horizontal=True, key=f"vlsw_pos_{rk}")
+        vlsw_notional = st.number_input("Notional ($)", value=1_000_000, step=100_000,
+                                         format="%d", key=f"vlsw_N_{rk}")
 
         if st.button("Price Vol Swap", type="primary"):
-            result = price_vol_swap(atm_vol_vlsw, mat_vlsw, notional, pos_vlsw)
+            result = price_vol_swap(atm_vol_vlsw, mat_vlsw, vlsw_notional, pos_vlsw)
             c1, c2 = st.columns(2)
             c1.metric("Fair Vol Strike",      f"{result['fair_vol_strike_pct']:.2f}%")
             c2.metric("Convexity Correction", f"{result['convexity_correction_bps']:.1f} bps")
@@ -513,7 +513,7 @@ with tabs[4]:
         ac_obs      = st.selectbox("Observation", [4, 12, 1], index=0,
                                     format_func=lambda x: {4: "Quarterly", 12: "Monthly", 1: "Annual"}[x],
                                     key=f"ac_obs_{rk}")
-        ac_notional = st.number_input("Notional ($)", value=notional,
+        ac_notional = st.number_input("Notional ($)", value=1_000_000,
                                        step=1_000_000, format="%d", key=f"ac_N_{rk}")
 
     def _price_ac(spot=100, vol=None, barrier=None):
@@ -623,7 +623,7 @@ with tabs[5]:
                                        step=0.05, key=f"sn_r_{rk}") / 100
         sn_q        = st.number_input("Div Yield (%)", value=round(q * 100, 2),
                                        step=0.1, key=f"sn_q_{rk}") / 100
-        sn_notional = st.number_input("Notional ($)", value=notional,
+        sn_notional = st.number_input("Notional ($)", value=1_000_000,
                                        step=1_000_000, format="%d", key=f"sn_N_{rk}")
     with c2:
         if note_type == "Capital Protection Note":
