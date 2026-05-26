@@ -24,6 +24,7 @@ from modules.pricing.structures.structured_notes import (
 )
 from modules.pricing.xva_proxy import total_xva
 from data.fetchers.equity_fetcher import get_vix_term_structure
+from utils.tearsheet import build_excel, build_pdf
 
 st.set_page_config(page_title="Pricing · Macro QIS", page_icon="💹", layout="wide")
 
@@ -90,8 +91,8 @@ def _sens_chart(x, y, xlabel, ylabel, title, vline=None, color="#4FC3F7"):
     return fig
 
 
-_TENOR_UNITS  = ["Days", "Weeks", "Months", "Years"]
-_TENOR_TO_YR  = {"Days": 1/365, "Weeks": 7/365, "Months": 1/12, "Years": 1.0}
+_TENOR_UNITS = ["Days", "Weeks", "Months", "Years"]
+_TENOR_TO_YR = {"Days": 1/365, "Weeks": 7/365, "Months": 1/12, "Years": 1.0}
 
 
 def _tenor_input(label, default_years, key, min_years=0.1):
@@ -108,6 +109,126 @@ def _tenor_input(label, default_years, key, min_years=0.1):
                             key=f"{key}_val", format=fmt)
     return float(val) * _TENOR_TO_YR[unit]
 
+
+def _dl_buttons(pname: str, inputs: dict, result: dict, xva: dict):
+    """Render the Excel + PDF download buttons for a pricing run."""
+    safe = pname.replace(" ", "_").replace("/", "-").replace("×", "x")
+    dc1, dc2, _ = st.columns([1, 1, 5])
+    dc1.download_button(
+        "⬇ Excel", build_excel(pname, inputs, result, xva),
+        file_name=f"tearsheet_{safe}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+    dc2.download_button(
+        "⬇ PDF", build_pdf(pname, inputs, result, xva),
+        file_name=f"tearsheet_{safe}.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+    )
+
+
+# ── Scenario library ───────────────────────────────────────────────────────────
+_SCENARIOS = {
+    "Baseline (Live)": None,
+    "GFC 2008 (Oct–Dec)": {
+        "desc": "VIX 80  ·  US10Y 2.5%  ·  EQ vol 70%  ·  Near-zero Fed funds",
+        "r": 0.50, "q": 1.50,
+        "swpn_fwd": 2.50, "swpn_vol": 60.0,
+        "bfo_vol": 15.0,
+        "eq_vol": 70.0,
+        "vs_atm": 70.0, "vlsw_atm": 70.0,
+        "vix": 80.0, "vix3m": 72.0,
+        "ac_r": 0.50, "ac_q": 1.50, "ac_vol": 65.0,
+        "sn_r": 0.50, "sn_q": 1.50, "sn_vol": 65.0,
+    },
+    "COVID Mar 2020": {
+        "desc": "VIX 85  ·  US10Y 0.8%  ·  EQ vol 75%  ·  Emergency rate cuts",
+        "r": 0.10, "q": 1.50,
+        "swpn_fwd": 0.80, "swpn_vol": 45.0,
+        "bfo_vol": 18.0,
+        "eq_vol": 75.0,
+        "vs_atm": 75.0, "vlsw_atm": 75.0,
+        "vix": 85.0, "vix3m": 75.0,
+        "ac_r": 0.10, "ac_q": 1.50, "ac_vol": 70.0,
+        "sn_r": 0.10, "sn_q": 1.50, "sn_vol": 70.0,
+    },
+    "Rate Spike 2022": {
+        "desc": "VIX 35  ·  US10Y 4.2%  ·  Swaption vol 130bpn  ·  Fastest hike cycle",
+        "r": 4.00, "q": 1.20,
+        "swpn_fwd": 4.20, "swpn_vol": 130.0,
+        "bfo_vol": 12.0,
+        "eq_vol": 30.0,
+        "vs_atm": 30.0, "vlsw_atm": 30.0,
+        "vix": 35.0, "vix3m": 32.0,
+        "ac_r": 4.00, "ac_q": 1.20, "ac_vol": 28.0,
+        "sn_r": 4.00, "sn_q": 1.20, "sn_vol": 28.0,
+    },
+    "Deep Inversion 2023": {
+        "desc": "VIX 17  ·  US10Y 5.0%  ·  2s10s −100 bps  ·  Soft-landing narrative",
+        "r": 5.25, "q": 1.50,
+        "swpn_fwd": 5.00, "swpn_vol": 80.0,
+        "bfo_vol": 8.0,
+        "eq_vol": 17.0,
+        "vs_atm": 17.0, "vlsw_atm": 17.0,
+        "vix": 17.0, "vix3m": 19.0,
+        "ac_r": 5.25, "ac_q": 1.50, "ac_vol": 16.0,
+        "sn_r": 5.25, "sn_q": 1.50, "sn_vol": 16.0,
+    },
+}
+
+# Maps scenario dict keys → widget key templates (values are in % where widgets expect %)
+_SC_KEY_MAP = {
+    "r":        "r_{rk}",
+    "q":        "q_{rk}",
+    "swpn_fwd": "swpn_fwd_{rk}",
+    "swpn_vol": "swpn_vol_{rk}",
+    "bfo_vol":  "bfo_vol_{rk}",
+    "eq_vol":   "eq_vol_{rk}",
+    "vs_atm":   "vs_atm_{rk}",
+    "vlsw_atm": "vlsw_atm_{rk}",
+    "vix":      "vix_s_{rk}",
+    "vix3m":    "vix_3m_{rk}",
+    "ac_r":     "ac_r_{rk}",
+    "ac_q":     "ac_q_{rk}",
+    "ac_vol":   "ac_vol_{rk}",
+    "sn_r":     "sn_r_{rk}",
+    "sn_q":     "sn_q_{rk}",
+    "sn_vol":   "sn_sig_{rk}",
+}
+
+# ── Scenario selector banner ───────────────────────────────────────────────────
+_sc_c1, _sc_c2, _sc_c3 = st.columns([3, 1, 5])
+with _sc_c1:
+    sc_choice = st.selectbox(
+        "Stress Scenario", list(_SCENARIOS.keys()),
+        key="scenario_select",
+        label_visibility="collapsed",
+        help="Pre-fill all pricing inputs with a historical stress scenario",
+    )
+with _sc_c2:
+    sc_apply = st.button("⚡ Apply", use_container_width=True,
+                          help="Inject scenario parameters into all pricing tabs")
+
+active_sc = st.session_state.get("active_scenario")
+if active_sc and active_sc != "Baseline (Live)":
+    sc_desc = (_SCENARIOS.get(active_sc) or {}).get("desc", "")
+    _sc_c3.info(f"⚡ **{active_sc}** — {sc_desc}")
+
+if sc_apply:
+    sc_data = _SCENARIOS.get(sc_choice)
+    new_rk = st.session_state.pricing_reset + 1
+    if sc_data:
+        for sc_key, tpl in _SC_KEY_MAP.items():
+            if sc_key in sc_data:
+                st.session_state[tpl.format(rk=new_rk)] = sc_data[sc_key]
+        st.session_state["active_scenario"] = sc_choice
+    else:
+        st.session_state["active_scenario"] = None
+    st.session_state.pricing_reset = new_rk
+    st.rerun()
+
+st.markdown("---")
 
 # ── Product tabs ───────────────────────────────────────────────────────────────
 tabs = st.tabs([
@@ -142,10 +263,46 @@ with tabs[0]:
                                          step=1_000_000, format="%d", key=f"swpn_N_{rk}")
 
     if st.button("Price Swaption", type="primary"):
-        result = price_swaption(fwd_rate, strike, T_exp, tenor, sigma_sw,
-                                notional=swpn_notional, option_type=opt_type)
-        xva = total_xva("RATE_SWPN", T_exp + tenor, swpn_notional, client_type,
-                        cds_override or None, funding_spread)
+        _res = price_swaption(fwd_rate, strike, T_exp, tenor, sigma_sw,
+                              notional=swpn_notional, option_type=opt_type)
+        _xva = total_xva("RATE_SWPN", T_exp + tenor, swpn_notional, client_type,
+                         cds_override or None, funding_spread)
+
+        # sensitivity data (compute at price-time, store for persistent display)
+        _rates = np.linspace(max(fwd_rate * 0.5, 0.005), fwd_rate * 1.8, 40)
+        _vols  = np.linspace(sigma_sw * 0.4, sigma_sw * 2.0, 40)
+        def _sw(F=fwd_rate, K=strike, T=T_exp, ten=tenor, s=sigma_sw, ot=opt_type):
+            return price_swaption(F, K, T, ten, s, notional=swpn_notional, option_type=ot)
+        _sens = dict(
+            ra=_rates * 100, va=_vols * 100,
+            p_rate=[_sw(F=f)["price_bps"] for f in _rates],
+            d_rate=[_sw(F=f)["dv01_bps"]  for f in _rates],
+            g_rate=[_sw(F=f)["gamma"]      for f in _rates],
+            v_rate=[_sw(F=f)["vega_bps"]   for f in _rates],
+            d_vol= [_sw(s=v)["dv01_bps"]  for v in _vols],
+            v_vol= [_sw(s=v)["vega_bps"]  for v in _vols],
+            fwd_pct=fwd_rate * 100, vol_pct=sigma_sw * 100,
+        )
+        st.session_state.update({
+            "_sw_r": _res, "_sw_x": _xva, "_sw_s": _sens, "_sw_rk": rk,
+            "_sw_i": {
+                "Option Type": opt_type.capitalize(),
+                "Forward Rate": f"{fwd_rate*100:.3f}%",
+                "Strike": f"{strike*100:.3f}%",
+                "OTM Shift": f"{otm_bps} bps",
+                "Expiry": f"{T_exp:.2f}Y",
+                "Swap Tenor": f"{tenor:.2f}Y",
+                "Vol": f"{sigma_sw*100:.1f}%",
+                "Notional": f"${swpn_notional:,.0f}",
+                "Client Type": client_type,
+            },
+            "_sw_n": f"Rate Swaption — {opt_type.capitalize()} {T_exp:.1f}Y×{tenor:.0f}Y",
+        })
+
+    if st.session_state.get("_sw_rk") == rk:
+        result = st.session_state["_sw_r"]
+        xva    = st.session_state["_sw_x"]
+        sens   = st.session_state["_sw_s"]
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Price", f"{result['price_bps']:.1f} bps",
@@ -166,40 +323,25 @@ with tabs[0]:
         with st.expander("Full Output"):
             st.json({**result, "xva": xva})
 
-        # ── Sensitivity charts ─────────────────────────────────────────────
         st.markdown("##### Sensitivity Charts")
-        rates  = np.linspace(max(fwd_rate * 0.5, 0.005), fwd_rate * 1.8, 40)
-        vols   = np.linspace(sigma_sw * 0.4, sigma_sw * 2.0, 40)
-
-        def _sw(F=fwd_rate, K=strike, T=T_exp, ten=tenor, s=sigma_sw, ot=opt_type):
-            return price_swaption(F, K, T, ten, s, notional=swpn_notional, option_type=ot)
-
-        price_vs_rate  = [_sw(F=f)["price_bps"] for f in rates]
-        delta_vs_rate  = [_sw(F=f)["dv01_bps"] for f in rates]
-        vega_vs_rate   = [_sw(F=f)["vega_bps"] for f in rates]
-        gamma_vs_rate  = [_sw(F=f)["gamma"] for f in rates]
-        price_vs_vol   = [_sw(s=v)["price_bps"] for v in vols]
-        delta_vs_vol   = [_sw(s=v)["dv01_bps"] for v in vols]
-        vega_vs_vol    = [_sw(s=v)["vega_bps"] for v in vols]
-
-        ra = rates * 100  # percent
-        va = vols  * 100
-
         r1c1, r1c2, r1c3 = st.columns(3)
-        r1c1.plotly_chart(_sens_chart(ra, price_vs_rate, "Rate (%)", "Price (bps)",
-                                       "Price vs Rate", fwd_rate*100), use_container_width=True)
-        r1c2.plotly_chart(_sens_chart(ra, delta_vs_rate, "Rate (%)", "DV01 (bps/bp)",
-                                       "DV01 vs Rate", fwd_rate*100, "#a78bfa"), use_container_width=True)
-        r1c3.plotly_chart(_sens_chart(ra, gamma_vs_rate, "Rate (%)", "Gamma",
-                                       "Gamma vs Rate", fwd_rate*100, "#fb923c"), use_container_width=True)
+        r1c1.plotly_chart(_sens_chart(sens["ra"], sens["p_rate"], "Rate (%)", "Price (bps)",
+                                       "Price vs Rate", sens["fwd_pct"]), use_container_width=True)
+        r1c2.plotly_chart(_sens_chart(sens["ra"], sens["d_rate"], "Rate (%)", "DV01 (bps/bp)",
+                                       "DV01 vs Rate", sens["fwd_pct"], "#a78bfa"), use_container_width=True)
+        r1c3.plotly_chart(_sens_chart(sens["ra"], sens["g_rate"], "Rate (%)", "Gamma",
+                                       "Gamma vs Rate", sens["fwd_pct"], "#fb923c"), use_container_width=True)
 
         r2c1, r2c2, r2c3 = st.columns(3)
-        r2c1.plotly_chart(_sens_chart(ra, vega_vs_rate, "Rate (%)", "Vega (bps/vol pt)",
-                                       "Vega vs Rate", fwd_rate*100, "#34d399"), use_container_width=True)
-        r2c2.plotly_chart(_sens_chart(va, delta_vs_vol, "Vol (%)", "DV01 (bps/bp)",
-                                       "DV01 vs Vol", sigma_sw*100, "#a78bfa"), use_container_width=True)
-        r2c3.plotly_chart(_sens_chart(va, vega_vs_vol, "Vol (%)", "Vega (bps/vol pt)",
-                                       "Vega vs Vol", sigma_sw*100, "#34d399"), use_container_width=True)
+        r2c1.plotly_chart(_sens_chart(sens["ra"], sens["v_rate"], "Rate (%)", "Vega (bps/vol pt)",
+                                       "Vega vs Rate", sens["fwd_pct"], "#34d399"), use_container_width=True)
+        r2c2.plotly_chart(_sens_chart(sens["va"], sens["d_vol"], "Vol (%)", "DV01 (bps/bp)",
+                                       "DV01 vs Vol", sens["vol_pct"], "#a78bfa"), use_container_width=True)
+        r2c3.plotly_chart(_sens_chart(sens["va"], sens["v_vol"], "Vol (%)", "Vega (bps/vol pt)",
+                                       "Vega vs Vol", sens["vol_pct"], "#34d399"), use_container_width=True)
+
+        _dl_buttons(st.session_state["_sw_n"],
+                    st.session_state["_sw_i"], result, xva)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 2: BOND FUTURES OPTION
@@ -223,10 +365,29 @@ with tabs[1]:
     bfo_notional = bfo_contracts * bfo_par_notional
 
     if st.button("Price Bond Futures Option", type="primary"):
-        result = price_bond_futures_option(futures_px, strike_bfo, T_bfo, sigma_bfo,
-                                            r=r, notional=bfo_notional, option_type=bfo_type)
-        xva = total_xva("RATE_BFO", T_bfo, bfo_notional, client_type,
-                        cds_override or None, funding_spread)
+        _res = price_bond_futures_option(futures_px, strike_bfo, T_bfo, sigma_bfo,
+                                          r=r, notional=bfo_notional, option_type=bfo_type)
+        _xva = total_xva("RATE_BFO", T_bfo, bfo_notional, client_type,
+                         cds_override or None, funding_spread)
+        st.session_state.update({
+            "_bfo_r": _res, "_bfo_x": _xva, "_bfo_rk": rk,
+            "_bfo_i": {
+                "Option Type": bfo_type.capitalize(),
+                "Futures Price": f"{futures_px:.2f}% par",
+                "Strike": f"{strike_bfo:.2f}% par",
+                "Expiry": f"{T_bfo:.2f}Y",
+                "Vol": f"{sigma_bfo*100:.1f}%",
+                "# Contracts": str(bfo_contracts),
+                "Notional / Contract": f"${bfo_par_notional:,.0f}",
+                "Total Notional": f"${bfo_notional:,.0f}",
+                "Client Type": client_type,
+            },
+            "_bfo_n": f"Bond Futures {bfo_type.capitalize()} {T_bfo:.2f}Y",
+        })
+
+    if st.session_state.get("_bfo_rk") == rk:
+        result = st.session_state["_bfo_r"]
+        xva    = st.session_state["_bfo_x"]
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Price", f"{result['price_pct']:.4f}% par",
@@ -243,6 +404,9 @@ with tabs[1]:
 
         with st.expander("Full Output"):
             st.json({**result, "xva": xva})
+
+        _dl_buttons(st.session_state["_bfo_n"],
+                    st.session_state["_bfo_i"], result, xva)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 3: EQUITY VANILLA STRATEGIES
@@ -321,102 +485,152 @@ with tabs[2]:
             return None
 
     if st.button("Price Strategy", type="primary"):
-        result = _price_eq(S, sigma_eq)
-
-        if result:
+        _res = _price_eq(S, sigma_eq)
+        if _res:
             position_size = eq_contracts * eq_multiplier
             pos_notional  = position_size * S
-            xva = total_xva("EQ_VANILLA", T_eq, pos_notional, client_type,
-                            cds_override or None, funding_spread)
+            _xva = total_xva("EQ_VANILLA", T_eq, pos_notional, client_type,
+                             cds_override or None, funding_spread)
+            prem = _res.get("net_premium", _res.get("net_cost",
+                   _res.get("call_premium_collected", 0)))
 
-            prem      = result.get("net_premium", result.get("net_cost",
-                        result.get("call_premium_collected", 0)))
-            prem_pct  = result.get("net_premium_pct", result.get("net_cost_pct",
-                        result.get("premium_pct", 0)))
-            net_delta = float(result.get("net_delta", result.get("put_delta", 0)) or 0)
-            net_vega  = float(result.get("net_vega", 0) or 0)
-
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Net Premium", f"{prem:.4f}",
-                        f"${prem * position_size:,.0f} total", delta_color="off")
-            col2.metric("Delta", f"{net_delta:.4f}",
-                        f"{net_delta * position_size:.1f} shares equiv.", delta_color="off")
-            col3.metric("Vega", f"{net_vega:.4f}",
-                        f"${net_vega * position_size:,.0f}/1%vol", delta_color="off")
-            col4.metric("Size", f"{eq_contracts}c × {eq_multiplier}x",
-                        f"${pos_notional:,.0f} equiv.", delta_color="off")
-
-            if "break_even_up" in result:
-                st.info(f"Break-evens: ↑ {result['break_even_up']:.1f}  |  ↓ {result['break_even_down']:.1f}")
-            elif "break_even" in result and result["break_even"]:
-                st.info(f"Break-even: {result['break_even']:.2f}")
-
-            st.caption("Legs: " + " | ".join(result.get("legs", [])))
-
-            with st.expander("Full Output"):
-                st.json({**result, "xva": xva})
-
-            # ── Payoff diagram ─────────────────────────────────────────────
+            # payoff diagram data
             spot_range = np.linspace(S * 0.7, S * 1.3, 200)
-            payoffs = []
+            payoffs_pos = []
             for s in spot_range:
                 try:
                     p = _price_eq(s, sigma_eq)
                     p_prem = p.get("net_premium", p.get("net_cost", 0)) if p else 0
-                    payoffs.append(float(p_prem) - float(prem))
+                    payoffs_pos.append((float(p_prem) - float(prem)) * position_size)
                 except Exception:
-                    payoffs.append(0.0)
+                    payoffs_pos.append(0.0)
 
-            payoffs_pos = [y * position_size for y in payoffs]
-            fig_payoff = go.Figure()
-            fig_payoff.add_trace(go.Scatter(x=list(spot_range), y=payoffs_pos, mode="lines",
-                                             fill="tozeroy", line=dict(color="#4FC3F7", width=2),
-                                             fillcolor="rgba(79,195,247,0.12)"))
-            fig_payoff.add_hline(y=0, line_color="#9E9E9E", line_dash="dash")
-            fig_payoff.add_vline(x=S, line_color="#FFD600", line_dash="dot",
-                                  annotation_text="Current spot")
-            fig_payoff.update_layout(
-                title=f"At-Expiry P&L  ({eq_contracts}c × {eq_multiplier}x = {position_size:,} shares)",
-                xaxis_title="Spot at Expiry", yaxis_title="P&L ($)", **_DARK)
-            st.plotly_chart(fig_payoff, use_container_width=True)
-
-            # ── Sensitivity charts ─────────────────────────────────────────
-            st.markdown("##### Sensitivity Charts")
-            spots = np.linspace(S * 0.7, S * 1.3, 50)
-            vols_eq = np.linspace(max(sigma_eq * 0.4, 0.02), sigma_eq * 2.2, 40)
-            eps = S * 0.001  # for numerical greeks
+            # sensitivity data
+            spots_s = np.linspace(S * 0.7, S * 1.3, 50)
+            vols_s  = np.linspace(max(sigma_eq * 0.4, 0.02), sigma_eq * 2.2, 40)
+            eps = S * 0.001
 
             def _prem(res):
                 return float(res.get("net_premium", res.get("net_cost",
                              res.get("call_premium_collected", 0)))) if res else 0.0
 
-            prem_vs_spot = [_prem(_price_eq(s, sigma_eq)) * position_size for s in spots]
-            prem_vs_vol  = [_prem(_price_eq(S, v))        * position_size for v in vols_eq]
-
-            # numerical delta and gamma vs spot (position-scaled)
+            prem_vs_spot, prem_vs_vol = [], []
             delta_vs_spot, gamma_vs_spot, vega_vs_spot = [], [], []
-            for s in spots:
-                p0  = _prem(_price_eq(s, sigma_eq))
-                pp  = _prem(_price_eq(s + eps, sigma_eq))
-                pm  = _prem(_price_eq(s - eps, sigma_eq))
-                pv  = _prem(_price_eq(s, min(sigma_eq + 0.01, 4.0)))
+            for s in spots_s:
+                p0 = _prem(_price_eq(s, sigma_eq))
+                pp = _prem(_price_eq(s + eps, sigma_eq))
+                pm = _prem(_price_eq(s - eps, sigma_eq))
+                pv = _prem(_price_eq(s, min(sigma_eq + 0.01, 4.0)))
+                prem_vs_spot.append(p0 * position_size)
                 delta_vs_spot.append((pp - pm) / (2 * eps)       * position_size)
                 gamma_vs_spot.append((pp - 2*p0 + pm) / eps**2   * position_size)
                 vega_vs_spot.append((pv - p0) / 0.01             * position_size)
+            for v in vols_s:
+                prem_vs_vol.append(_prem(_price_eq(S, v)) * position_size)
 
-            rc1, rc2, rc3 = st.columns(3)
-            rc1.plotly_chart(_sens_chart(spots, prem_vs_spot, "Spot", "Premium ($)",
-                                          "Premium vs Spot", S), use_container_width=True)
-            rc2.plotly_chart(_sens_chart(vols_eq*100, prem_vs_vol, "Vol (%)", "Premium ($)",
-                                          "Premium vs Vol", sigma_eq*100), use_container_width=True)
-            rc3.plotly_chart(_sens_chart(spots, delta_vs_spot, "Spot", "Delta (shares)",
-                                          "Delta vs Spot", S, "#a78bfa"), use_container_width=True)
+            # build strike info for inputs dict
+            if strategy in ("Call", "Put", "Straddle", "Covered Call"):
+                k_str = f"K={K:.0f}"
+            elif strategy in ("Call Spread", "Risk Reversal"):
+                k_str = f"K_lo={K_lo:.0f} / K_hi={K_hi:.0f}"
+            else:
+                k_str = f"K_put={K_put:.0f} / K_call={K_call:.0f}"
 
-            rc4, rc5, _ = st.columns(3)
-            rc4.plotly_chart(_sens_chart(spots, vega_vs_spot, "Spot", "Vega ($/1%vol)",
-                                          "Vega vs Spot", S, "#34d399"), use_container_width=True)
-            rc5.plotly_chart(_sens_chart(spots, gamma_vs_spot, "Spot", "Gamma ($/pt²)",
-                                          "Gamma vs Spot", S, "#fb923c"), use_container_width=True)
+            st.session_state.update({
+                "_eq_r": _res, "_eq_x": _xva, "_eq_rk": rk,
+                "_eq_ps": position_size, "_eq_pn": pos_notional,
+                "_eq_prem": prem, "_eq_S": S, "_eq_sig": sigma_eq,
+                "_eq_payoff_x": list(spot_range), "_eq_payoff_y": payoffs_pos,
+                "_eq_sens": dict(
+                    spots=spots_s, vols=vols_s,
+                    prem_vs_spot=prem_vs_spot, prem_vs_vol=prem_vs_vol,
+                    delta_vs_spot=delta_vs_spot, gamma_vs_spot=gamma_vs_spot,
+                    vega_vs_spot=vega_vs_spot,
+                ),
+                "_eq_i": {
+                    "Strategy": strategy,
+                    "Underlying": underlying,
+                    "Spot": f"{S:.1f}",
+                    "Strikes": k_str,
+                    "Expiry": f"{T_eq:.2f}Y",
+                    "ATM Vol": f"{sigma_eq*100:.1f}%",
+                    "OTM Skew": f"{sigma_skew*100:.1f} pts/5%OTM",
+                    "# Contracts": str(eq_contracts),
+                    "Multiplier": str(eq_multiplier),
+                    "Client Type": client_type,
+                },
+                "_eq_n": f"EQ {strategy} {underlying.split()[0]} {T_eq:.2f}Y",
+            })
+
+    if st.session_state.get("_eq_rk") == rk:
+        result = st.session_state["_eq_r"]
+        xva    = st.session_state["_eq_x"]
+        position_size = st.session_state["_eq_ps"]
+        pos_notional  = st.session_state["_eq_pn"]
+        prem          = st.session_state["_eq_prem"]
+        sens          = st.session_state["_eq_sens"]
+
+        prem_pct  = result.get("net_premium_pct", result.get("net_cost_pct",
+                    result.get("premium_pct", 0)))
+        net_delta = float(result.get("net_delta", result.get("put_delta", 0)) or 0)
+        net_vega  = float(result.get("net_vega", 0) or 0)
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Net Premium", f"{prem:.4f}",
+                    f"${prem * position_size:,.0f} total", delta_color="off")
+        col2.metric("Delta", f"{net_delta:.4f}",
+                    f"{net_delta * position_size:.1f} shares equiv.", delta_color="off")
+        col3.metric("Vega", f"{net_vega:.4f}",
+                    f"${net_vega * position_size:,.0f}/1%vol", delta_color="off")
+        col4.metric("Size", f"{eq_contracts}c × {eq_multiplier}x",
+                    f"${pos_notional:,.0f} equiv.", delta_color="off")
+
+        if "break_even_up" in result:
+            st.info(f"Break-evens: ↑ {result['break_even_up']:.1f}  |  ↓ {result['break_even_down']:.1f}")
+        elif "break_even" in result and result["break_even"]:
+            st.info(f"Break-even: {result['break_even']:.2f}")
+
+        st.caption("Legs: " + " | ".join(result.get("legs", [])))
+
+        with st.expander("Full Output"):
+            st.json({**result, "xva": xva})
+
+        # payoff diagram
+        fig_payoff = go.Figure()
+        fig_payoff.add_trace(go.Scatter(
+            x=st.session_state["_eq_payoff_x"], y=st.session_state["_eq_payoff_y"],
+            mode="lines", fill="tozeroy",
+            line=dict(color="#4FC3F7", width=2), fillcolor="rgba(79,195,247,0.12)"))
+        fig_payoff.add_hline(y=0, line_color="#9E9E9E", line_dash="dash")
+        fig_payoff.add_vline(x=st.session_state["_eq_S"], line_color="#FFD600",
+                              line_dash="dot", annotation_text="Current spot")
+        fig_payoff.update_layout(
+            title=f"At-Expiry P&L  ({eq_contracts}c × {eq_multiplier}x = {position_size:,} shares)",
+            xaxis_title="Spot at Expiry", yaxis_title="P&L ($)", **_DARK)
+        st.plotly_chart(fig_payoff, use_container_width=True)
+
+        st.markdown("##### Sensitivity Charts")
+        rc1, rc2, rc3 = st.columns(3)
+        rc1.plotly_chart(_sens_chart(sens["spots"], sens["prem_vs_spot"], "Spot", "Premium ($)",
+                                      "Premium vs Spot", st.session_state["_eq_S"]),
+                          use_container_width=True)
+        rc2.plotly_chart(_sens_chart(sens["vols"]*100, sens["prem_vs_vol"], "Vol (%)", "Premium ($)",
+                                      "Premium vs Vol", st.session_state["_eq_sig"]*100),
+                          use_container_width=True)
+        rc3.plotly_chart(_sens_chart(sens["spots"], sens["delta_vs_spot"], "Spot", "Delta (shares)",
+                                      "Delta vs Spot", st.session_state["_eq_S"], "#a78bfa"),
+                          use_container_width=True)
+
+        rc4, rc5, _ = st.columns(3)
+        rc4.plotly_chart(_sens_chart(sens["spots"], sens["vega_vs_spot"], "Spot", "Vega ($/1%vol)",
+                                      "Vega vs Spot", st.session_state["_eq_S"], "#34d399"),
+                          use_container_width=True)
+        rc5.plotly_chart(_sens_chart(sens["spots"], sens["gamma_vs_spot"], "Spot", "Gamma ($/pt²)",
+                                      "Gamma vs Spot", st.session_state["_eq_S"], "#fb923c"),
+                          use_container_width=True)
+
+        _dl_buttons(st.session_state["_eq_n"],
+                    st.session_state["_eq_i"], result, xva)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 4: VOL PRODUCTS
@@ -440,9 +654,26 @@ with tabs[3]:
 
         if st.button("Price Var Swap", type="primary"):
             rv = rv_input if rv_input > 0 else None
-            result = price_var_swap(atm_vol_vs, rv, mat_vs, vega_notional, skew_vs, pos_vs)
-            xva    = total_xva("VOL_PROD", mat_vs, vega_notional, client_type,
-                               cds_override or None, funding_spread)
+            _res = price_var_swap(atm_vol_vs, rv, mat_vs, vega_notional, skew_vs, pos_vs)
+            _xva = total_xva("VOL_PROD", mat_vs, vega_notional, client_type,
+                             cds_override or None, funding_spread)
+            st.session_state.update({
+                "_vs_r": _res, "_vs_x": _xva, "_vs_rk": rk,
+                "_vs_i": {
+                    "ATM Implied Vol": f"{atm_vol_vs*100:.1f}%",
+                    "RV to Date": f"{rv_input*100:.1f}%" if rv_input > 0 else "Forward start",
+                    "Maturity": f"{mat_vs:.2f}Y",
+                    "Position": pos_vs.capitalize(),
+                    "Skew Slope": str(skew_vs),
+                    "Vega Notional": f"${vega_notional:,.0f}",
+                    "Client Type": client_type,
+                },
+                "_vs_n": f"Variance Swap {mat_vs:.2f}Y {pos_vs.capitalize()}",
+            })
+
+        if st.session_state.get("_vs_rk") == rk:
+            result = st.session_state["_vs_r"]
+            xva    = st.session_state["_vs_x"]
 
             c1, c2, c3 = st.columns(3)
             c1.metric("Fair Var Strike (as vol)", f"{result['fair_var_strike_pct']:.2f}%")
@@ -454,6 +685,9 @@ with tabs[3]:
             with st.expander("Full Output"):
                 st.json({**result, "xva": xva})
 
+            _dl_buttons(st.session_state["_vs_n"],
+                        st.session_state["_vs_i"], result, xva)
+
     elif prod_choice == "Vol Swap":
         atm_vol_vlsw  = st.number_input("ATM Vol (%)", value=18.0, step=0.5, key=f"vlsw_atm_{rk}") / 100
         mat_vlsw      = _tenor_input("Maturity", 0.5, f"vlsw_mat_{rk}")
@@ -462,11 +696,34 @@ with tabs[3]:
                                          format="%d", key=f"vlsw_N_{rk}")
 
         if st.button("Price Vol Swap", type="primary"):
-            result = price_vol_swap(atm_vol_vlsw, mat_vlsw, vlsw_notional, pos_vlsw)
+            _res = price_vol_swap(atm_vol_vlsw, mat_vlsw, vlsw_notional, pos_vlsw)
+            _xva = total_xva("VOL_PROD", mat_vlsw, vlsw_notional, client_type,
+                             cds_override or None, funding_spread)
+            st.session_state.update({
+                "_vlsw_r": _res, "_vlsw_x": _xva, "_vlsw_rk": rk,
+                "_vlsw_i": {
+                    "ATM Vol": f"{atm_vol_vlsw*100:.1f}%",
+                    "Maturity": f"{mat_vlsw:.2f}Y",
+                    "Position": pos_vlsw.capitalize(),
+                    "Notional": f"${vlsw_notional:,.0f}",
+                    "Client Type": client_type,
+                },
+                "_vlsw_n": f"Vol Swap {mat_vlsw:.2f}Y {pos_vlsw.capitalize()}",
+            })
+
+        if st.session_state.get("_vlsw_rk") == rk:
+            result = st.session_state["_vlsw_r"]
+            xva    = st.session_state["_vlsw_x"]
+
             c1, c2 = st.columns(2)
             c1.metric("Fair Vol Strike",      f"{result['fair_vol_strike_pct']:.2f}%")
             c2.metric("Convexity Correction", f"{result['convexity_correction_bps']:.1f} bps")
-            st.caption(f"Var vs Vol premium: {result['var_vs_vol_premium_bps']:.1f} bps")
+            st.caption(f"Var vs Vol premium: {result['var_vs_vol_premium_bps']:.1f} bps  |  xVA: {xva['total_xva_bps']:.1f} bps")
+            with st.expander("Full Output"):
+                st.json({**result, "xva": xva})
+
+            _dl_buttons(st.session_state["_vlsw_n"],
+                        st.session_state["_vlsw_i"], result, xva)
 
     elif prod_choice == "VIX Roll-Down":
         with st.spinner("Fetching VIX..."):
@@ -482,11 +739,26 @@ with tabs[3]:
             roll_days = st.number_input("Rolling Horizon (days)", value=30, step=5, key=f"vix_rd_{rk}")
 
         if st.button("Compute Roll-Down", type="primary"):
-            result = vix_roll_down(vix_spot_in, vix3m_in, roll_days)
+            _res = vix_roll_down(vix_spot_in, vix3m_in, roll_days)
+            st.session_state.update({
+                "_vix_r": _res, "_vix_rk": rk,
+                "_vix_i": {
+                    "VIX Spot": f"{vix_spot_in:.1f}",
+                    "VIX 3M": f"{vix3m_in:.1f}",
+                    "Roll Horizon": f"{roll_days} days",
+                },
+                "_vix_n": f"VIX Roll-Down {roll_days}d",
+            })
+
+        if st.session_state.get("_vix_rk") == rk:
+            result = st.session_state["_vix_r"]
             c1, c2, c3 = st.columns(3)
-            c1.metric("Contango",          f"{result.get('contango_pct', 0):+.2f}%")
+            c1.metric("Contango",            f"{result.get('contango_pct', 0):+.2f}%")
             c2.metric(f"Roll ({roll_days}d)", f"{result.get('roll_carry_per_month', 0):.2f} vol pts")
-            c3.metric("Ann. Carry",        f"{result.get('annualised_carry_pct', 0):.2f}%/vix")
+            c3.metric("Ann. Carry",          f"{result.get('annualised_carry_pct', 0):.2f}%/vix")
+
+            _dl_buttons(st.session_state["_vix_n"],
+                        st.session_state["_vix_i"], result, {})
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5: AUTOCALL
@@ -517,9 +789,6 @@ with tabs[4]:
                                        step=1_000_000, format="%d", key=f"ac_N_{rk}")
 
     def _price_ac(spot=100, vol=None, barrier=None):
-        # spot is % of initial (100 = at initial level).
-        # price_autocall works in normalised space (S0=1) so we must rescale
-        # the absolute barriers to be relative to current spot.
         b = barrier if barrier is not None else ac_barrier
         barrier_rel = b * 100.0 / spot
         ki_rel      = ac_ki * 100.0 / spot
@@ -536,9 +805,52 @@ with tabs[4]:
         )
 
     if st.button("Price Autocall", type="primary"):
-        result = _price_ac()
-        xva    = total_xva("STRUCT_AC", ac_maturity, ac_notional, client_type,
-                           cds_override or None, funding_spread)
+        _res = _price_ac()
+        _xva = total_xva("STRUCT_AC", ac_maturity, ac_notional, client_type,
+                         cds_override or None, funding_spread)
+
+        spots_ac = np.linspace(70, 130, 40)
+        vols_ac  = np.linspace(0.08, 0.55, 40)
+        eps_s    = 1.0
+        p_spot, d_spot, g_spot, v_spot, p_vol = [], [], [], [], []
+        for s in spots_ac:
+            p0 = _price_ac(spot=s)["indicative_price_pct"]
+            pp = _price_ac(spot=s + eps_s)["indicative_price_pct"]
+            pm = _price_ac(spot=s - eps_s)["indicative_price_pct"]
+            pv = _price_ac(spot=s, vol=min(ac_sigma + 0.01, 0.99))["indicative_price_pct"]
+            p_spot.append(p0)
+            d_spot.append((pp - pm) / (2 * eps_s))
+            g_spot.append((pp - 2*p0 + pm) / eps_s**2)
+            v_spot.append((pv - p0) / 0.01)
+        for v in vols_ac:
+            p_vol.append(_price_ac(vol=v)["indicative_price_pct"])
+
+        obs_label = {4: "Quarterly", 12: "Monthly", 1: "Annual"}[ac_obs]
+        st.session_state.update({
+            "_ac_r": _res, "_ac_x": _xva, "_ac_rk": rk,
+            "_ac_sens": dict(spots=spots_ac, vols=vols_ac, vols_pct=vols_ac*100,
+                             ac_vol_pct=ac_sigma*100,
+                             p_spot=p_spot, d_spot=d_spot, g_spot=g_spot,
+                             v_spot=v_spot, p_vol=p_vol),
+            "_ac_i": {
+                "Underlying Vol": f"{ac_sigma*100:.1f}%",
+                "Risk-Free Rate": f"{ac_r*100:.2f}%",
+                "Div Yield": f"{ac_q*100:.1f}%",
+                "Autocall Barrier": f"{ac_barrier*100:.0f}% initial",
+                "KI Barrier": f"{ac_ki*100:.0f}% initial",
+                "Annual Coupon": f"{ac_coupon*100:.1f}%",
+                "Maturity": f"{ac_maturity:.2f}Y",
+                "Observation": obs_label,
+                "Notional": f"${ac_notional:,.0f}",
+                "Client Type": client_type,
+            },
+            "_ac_n": f"Autocall {ac_maturity:.1f}Y {ac_coupon*100:.1f}%cpn",
+        })
+
+    if st.session_state.get("_ac_rk") == rk:
+        result = st.session_state["_ac_r"]
+        xva    = st.session_state["_ac_x"]
+        sens   = st.session_state["_ac_sens"]
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Indicative Price",   f"{result['indicative_price_pct']:.2f}% par",
@@ -555,45 +867,26 @@ with tabs[4]:
         with st.expander("Full Output"):
             st.json({**result, "xva": xva})
 
-        # ── Sensitivity charts ─────────────────────────────────────────────
         st.markdown("##### Sensitivity Charts")
-
-        spots_ac = np.linspace(70, 130, 40)   # % of initial (autocall uses spot=100 base)
-        vols_ac  = np.linspace(0.08, 0.55, 40)
-        eps_s    = 1.0  # 1% spot move
-
-        prices_vs_spot, prices_vs_vol = [], []
-        deltas_vs_spot, gammas_vs_spot, vegas_vs_spot = [], [], []
-
-        for s in spots_ac:
-            p0  = _price_ac(spot=s)["indicative_price_pct"]
-            pp  = _price_ac(spot=s + eps_s)["indicative_price_pct"]
-            pm  = _price_ac(spot=s - eps_s)["indicative_price_pct"]
-            pv  = _price_ac(spot=s, vol=min(ac_sigma + 0.01, 0.99))["indicative_price_pct"]
-            prices_vs_spot.append(p0)
-            deltas_vs_spot.append((pp - pm) / (2 * eps_s))
-            gammas_vs_spot.append((pp - 2*p0 + pm) / (eps_s**2))
-            vegas_vs_spot.append((pv - p0) / 0.01)
-
-        for v in vols_ac:
-            prices_vs_vol.append(_price_ac(vol=v)["indicative_price_pct"])
-
         ac1, ac2 = st.columns(2)
-        ac1.plotly_chart(_sens_chart(spots_ac, prices_vs_spot, "Spot (% initial)", "Price (% par)",
+        ac1.plotly_chart(_sens_chart(sens["spots"], sens["p_spot"], "Spot (% initial)", "Price (% par)",
                                       "Price vs Spot", 100), use_container_width=True)
-        ac2.plotly_chart(_sens_chart(vols_ac*100, prices_vs_vol, "Vol (%)", "Price (% par)",
-                                      "Price vs Vol", ac_sigma*100), use_container_width=True)
+        ac2.plotly_chart(_sens_chart(sens["vols_pct"], sens["p_vol"], "Vol (%)", "Price (% par)",
+                                      "Price vs Vol", sens["ac_vol_pct"]), use_container_width=True)
 
         ac3, ac4, ac5 = st.columns(3)
-        ac3.plotly_chart(_sens_chart(spots_ac, deltas_vs_spot, "Spot (% initial)",
+        ac3.plotly_chart(_sens_chart(sens["spots"], sens["d_spot"], "Spot (% initial)",
                                       "Δ Price / Δ Spot", "Delta vs Spot", 100, "#a78bfa"),
                           use_container_width=True)
-        ac4.plotly_chart(_sens_chart(spots_ac, gammas_vs_spot, "Spot (% initial)",
+        ac4.plotly_chart(_sens_chart(sens["spots"], sens["g_spot"], "Spot (% initial)",
                                       "Δ² Price / Δ Spot²", "Gamma vs Spot", 100, "#fb923c"),
                           use_container_width=True)
-        ac5.plotly_chart(_sens_chart(spots_ac, vegas_vs_spot, "Spot (% initial)",
+        ac5.plotly_chart(_sens_chart(sens["spots"], sens["v_spot"], "Spot (% initial)",
                                       "Δ Price / Δ1%vol", "Vega vs Spot", 100, "#34d399"),
                           use_container_width=True)
+
+        _dl_buttons(st.session_state["_ac_n"],
+                    st.session_state["_ac_i"], result, xva)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 6: STRUCTURED NOTES
@@ -635,13 +928,56 @@ with tabs[5]:
 
     if st.button("Price Note", type="primary"):
         if note_type == "Capital Protection Note":
-            result = price_capital_protection_note(
+            _res = price_capital_protection_note(
                 sn_spot, strike_ratio, participation, sn_mat,
                 sn_r, sn_q, sn_sigma, protection, sn_notional,
             )
-            xva = total_xva("STRUCT_AC", sn_mat, sn_notional, client_type,
-                            cds_override or None, funding_spread)
+            _xva = total_xva("STRUCT_AC", sn_mat, sn_notional, client_type,
+                             cds_override or None, funding_spread)
+            _inp = {
+                "Note Type": "Capital Protection Note",
+                "Spot": f"{sn_spot:.1f}",
+                "Call Strike": f"{strike_ratio*100:.0f}% of initial",
+                "Participation": f"{participation*100:.0f}%",
+                "Protection Level": f"{protection*100:.0f}%",
+                "Maturity": f"{sn_mat:.2f}Y",
+                "Vol": f"{sn_sigma*100:.1f}%",
+                "Risk-Free Rate": f"{sn_r*100:.2f}%",
+                "Div Yield": f"{sn_q*100:.1f}%",
+                "Notional": f"${sn_notional:,.0f}",
+                "Client Type": client_type,
+            }
+            _name = f"CPN {sn_mat:.1f}Y {protection*100:.0f}%prot {participation*100:.0f}%part"
+        else:
+            _res = price_yield_enhancement_note(
+                sn_spot, sn_strike_ratio, sn_mat, sn_r, sn_q, sn_sigma, sn_notional,
+            )
+            _xva = total_xva("STRUCT_AC", sn_mat, sn_notional, client_type,
+                             cds_override or None, funding_spread)
+            _inp = {
+                "Note Type": "Yield Enhancement (Reverse Convertible)",
+                "Spot": f"{sn_spot:.1f}",
+                "Put Strike": f"{sn_strike_ratio*100:.0f}% of spot",
+                "Maturity": f"{sn_mat:.2f}Y",
+                "Vol": f"{sn_sigma*100:.1f}%",
+                "Risk-Free Rate": f"{sn_r*100:.2f}%",
+                "Div Yield": f"{sn_q*100:.1f}%",
+                "Notional": f"${sn_notional:,.0f}",
+                "Client Type": client_type,
+            }
+            _name = f"YEN {sn_mat:.1f}Y {sn_strike_ratio*100:.0f}%strike"
 
+        st.session_state.update({
+            "_sn_r": _res, "_sn_x": _xva, "_sn_rk": rk,
+            "_sn_i": _inp, "_sn_n": _name, "_sn_type": note_type,
+        })
+
+    if st.session_state.get("_sn_rk") == rk:
+        result    = st.session_state["_sn_r"]
+        xva       = st.session_state["_sn_x"]
+        note_type_disp = st.session_state["_sn_type"]
+
+        if note_type_disp == "Capital Protection Note":
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Cost", f"{result['total_cost_pct']:.2f}%",
                         f"${result['total_cost_pct'] / 100 * sn_notional:,.0f}  "
@@ -659,14 +995,7 @@ with tabs[5]:
             col6.metric("Protection",     f"{result['protection_level_pct']:.0f}%",
                         f"Participation {result['participation_pct']:.0f}%",
                         delta_color="off")
-
         else:
-            result = price_yield_enhancement_note(
-                sn_spot, sn_strike_ratio, sn_mat, sn_r, sn_q, sn_sigma, sn_notional,
-            )
-            xva = total_xva("STRUCT_AC", sn_mat, sn_notional, client_type,
-                            cds_override or None, funding_spread)
-
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Total Yield",  f"{result['total_yield_pct']:.2f}%",
                         f"${result['total_yield_pct'] / 100 * sn_notional:,.0f}  "
@@ -683,3 +1012,6 @@ with tabs[5]:
 
         with st.expander("Full Output"):
             st.json({**result, "xva": xva})
+
+        _dl_buttons(st.session_state["_sn_n"],
+                    st.session_state["_sn_i"], result, xva)
