@@ -38,7 +38,8 @@ def payoff_attribution(trade_df, strategy):
 
             # All contributions normalised by S0 to match trade_df pnl units (% of spot)
             delta_pnl = g["delta"] * (S_T - S0) / S0
-            vega_pnl  = g["vega"]  * (row.get("vol_exit", sigma) - sigma) / S0
+            # g["vega"] is $/vol-point; vol values are decimal → multiply by 100 to convert
+            vega_pnl  = g["vega"]  * (row.get("vol_exit", sigma) - sigma) * 100 / S0
             theta_pnl = g["theta"] * tenor / S0
             residual  = row["pnl"] - delta_pnl - vega_pnl - theta_pnl
         except Exception:
