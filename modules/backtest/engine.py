@@ -243,6 +243,7 @@ class BacktestEngine:
                 "exit_date":  exit_date,
                 "S_entry": S0,
                 "S_exit":  S_T,
+                "T_entry": T_years,
                 "spot_ret_pct": spot_ret * 100,
                 "vol_entry": sigma,
                 "vol_exit":  sigma_T,

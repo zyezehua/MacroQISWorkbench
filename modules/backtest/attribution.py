@@ -30,7 +30,8 @@ def payoff_attribution(trade_df, strategy):
         sigma = row["vol_entry"]
         r     = 0.04          # approximate; full version would use per-trade rate
         tenor = (pd.Timestamp(row["exit_date"]) - pd.Timestamp(row["entry_date"])).days
-        T     = max(tenor / 252.0, 1e-6)
+        # Use the engine's T (business-day tenor) if stored; fall back to calendar/365
+        T     = max(row.get("T_entry", tenor / 365.0), 1e-6)
 
         try:
             _, legs = _price_strategy(strategy, S0, T, r, sigma)
