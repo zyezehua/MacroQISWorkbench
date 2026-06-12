@@ -25,14 +25,10 @@ from modules.pricing.structures.structured_notes import (
 from modules.pricing.xva_proxy import total_xva
 from data.fetchers.equity_fetcher import get_vix_term_structure
 from utils.tearsheet import build_excel, build_pdf
+from ui.style import inject_global_css
 
 st.set_page_config(page_title="Pricing · Macro QIS", page_icon="💹", layout="wide")
-
-st.markdown("""<style>
-[data-testid="stMetricValue"] { font-size: 1rem !important; }
-[data-testid="stMetricLabel"] { font-size: 0.72rem !important; }
-[data-testid="stMetricDelta"] { font-size: 0.72rem !important; }
-</style>""", unsafe_allow_html=True)
+inject_global_css()
 
 st.title("💹 Pricing Calculator")
 st.caption("Indicative pricing · Black / Black-76 / Analytical approximation · PoC level")

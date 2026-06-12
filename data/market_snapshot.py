@@ -2,6 +2,7 @@ from data.fetchers.equity_fetcher import (
     get_current_spot,
     get_vix_term_structure,
     get_historical_vol,
+    get_last_trading_day,
 )
 from data.fetchers.rates_fetcher import get_current_rates, get_curve_spreads
 from data.fetchers.macro_fetcher import get_latest_macro
@@ -34,6 +35,10 @@ def get_market_snapshot(overrides=None):
 
     macro = get_latest_macro()
     snapshot.update(macro)
+
+    as_of = get_last_trading_day()
+    if as_of is not None:
+        snapshot["as_of_date"] = as_of
 
     if overrides:
         snapshot.update(overrides)

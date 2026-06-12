@@ -6,14 +6,10 @@ from config import CLIENT_TYPES, SCORECARD_DIMENSIONS, PRODUCTS
 from modules.idea_scanner.scanner import run_scan
 from ui.components.macro_dashboard import render_regime, render_market_snapshot
 from ui.components.scorecard_table import render_scorecard, render_top_idea
+from ui.style import inject_global_css
 
 st.set_page_config(page_title="Idea Scanner · Macro QIS", page_icon="🔍", layout="wide")
-
-st.markdown("""<style>
-[data-testid="stMetricValue"] { font-size: 1rem !important; }
-[data-testid="stMetricLabel"] { font-size: 0.72rem !important; }
-[data-testid="stMetricDelta"] { font-size: 0.72rem !important; }
-</style>""", unsafe_allow_html=True)
+inject_global_css()
 
 st.title("🔍 Idea Scanner")
 st.caption("Macro regime → product scorecard with compliance and liquidity flags")

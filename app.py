@@ -1,11 +1,14 @@
 import streamlit as st
 
+from ui.style import inject_global_css
+
 st.set_page_config(
     page_title="Macro QIS Workbench",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+inject_global_css()
 
 st.title("📊 Macro QIS Workbench")
 st.markdown("**Structurer toolkit · Proof of Concept**")

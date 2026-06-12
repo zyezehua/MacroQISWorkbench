@@ -12,14 +12,10 @@ from modules.backtest.engine import BacktestEngine, STRATEGIES
 from modules.backtest.metrics import compute_metrics, cumulative_pnl, rolling_sharpe, underwater_series
 from modules.backtest.scenarios import SCENARIOS, slice_trades, describe_scenario
 from modules.backtest.attribution import payoff_attribution, attribution_summary
+from ui.style import inject_global_css
 
 st.set_page_config(page_title="Backtest · Macro QIS", page_icon="📈", layout="wide")
-
-st.markdown("""<style>
-[data-testid="stMetricValue"] { font-size: 1rem !important; }
-[data-testid="stMetricLabel"] { font-size: 0.72rem !important; }
-[data-testid="stMetricDelta"] { font-size: 0.72rem !important; }
-</style>""", unsafe_allow_html=True)
+inject_global_css()
 
 st.title("📈 Backtest & Historical Analysis")
 

@@ -46,6 +46,29 @@ def get_current_spot(ticker_symbol):
     return None
 
 
+def get_last_trading_day(reference_symbol="^GSPC"):
+    """Date of the most recent available close for the reference index.
+
+    Used to stamp the market snapshot with an honest "as of" date so weekend /
+    holiday runs show the last business day rather than implying live data.
+    Returns a pandas.Timestamp (date) or None if unavailable.
+    """
+    key = f"last_trading_day_{reference_symbol}"
+    cached = get_cache(key)
+    if cached is not None:
+        return cached
+    try:
+        hist = yf.download(reference_symbol, period="5d", auto_adjust=True, progress=False)
+        idx = hist["Close"].squeeze().dropna().index
+        if len(idx) > 0:
+            as_of = pd.Timestamp(idx[-1]).normalize()
+            set_cache(key, as_of)
+            return as_of
+    except Exception:
+        pass
+    return None
+
+
 def get_vix_term_structure():
     key = "vix_ts"
     cached = get_cache(key)
